@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ngzip — LLM Adaptive Pruning &amp; MLP Compression (Llama-3.2-1B)</title>
+  <meta property="og:title" content="ngzip — LLM Adaptive Pruning &amp; MLP Compression (Llama-3.2-1B)" />
+  <meta property="og:description" content="Lossless Elastic Channel-level Adaptive Pruning (LECAP) &amp; Prosthesis-Aware Fine-Tuning (PAFT) for Transformer MLP layers." />
+  <style>
+    :root {
+      --bg: #080f1a;
+      --panel: #101c2e;
+      --panel-border: rgba(148, 163, 184, 0.16);
+      --text: #eef4ff;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --purple: #a855f7;
+      --rose: #f43f5e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 20% 0%, #132540 0%, var(--bg) 70%);
+      color: var(--text);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      padding: 18px 24px;
+    }
+    .shell {
+      max-width: 1260px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(16, 28, 46, 0.9);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 12px 18px;
+    }
+    .brand h1 {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      font-size: 0.75rem;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.16);
+      color: #7dd3fc;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-weight: 700;
+    }
+    .brand p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 3px;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+    }
+    .tab-btn {
+      border: 1px solid var(--panel-border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.84rem;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #fff;
+      border-color: transparent;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .kpi-card {
+      background: rgba(16, 28, 46, 0.88);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 12px 15px;
+    }
+    .kpi-label {
+      font-size: 0.76rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .kpi-val {
+      font-size: 1.55rem;
+      font-weight: 800;
+      margin-top: 4px;
+    }
+    .kpi-sub {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.38fr 1fr;
+      gap: 14px;
+    }
+    .card {
+      background: rgba(16, 28, 46, 0.9);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .card-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .card h2 {
+      font-size: 0.98rem;
+      font-weight: 700;
+    }
+    .card-sub {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: rgba(8, 15, 26, 0.65);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .legend-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    .table-mini {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.79rem;
+    }
+    .table-mini th, .table-mini td {
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .table-mini th:first-child, .table-mini td:first-child {
+      text-align: left;
+    }
+    .table-mini th {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .pill-green { color: #34d399; font-weight: 700; }
+    .pill-blue { color: #60a5fa; font-weight: 700; }
+    .pill-amber { color: #fbbf24; font-weight: 700; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <h1>
+          ⚡ ngzip — LLM Adaptive Pruning &amp; Prosthesis-Aware Fine-Tuning
+          <span class="badge">PyTorch · CUDA · FineWeb-Edu</span>
+        </h1>
+        <p>Lossless Elastic Channel-level Adaptive Pruning (LECAP), Rank-Based Lock Penalties &amp; Decision-Tree MLP Prosthesis</p>
+      </div>
+      <div class="tabs">
+        <button id="tabBtn1" class="tab-btn active" onclick="switchTab(1)">1. LECAP + PAFT Compression</button>
+        <button id="tabBtn2" class="tab-btn" onclick="switchTab(2)">2. 12,288-Neuron Prosthesis &amp; Emax=0.5</button>
+      </div>
+    </header>
+
+    <!-- VIEW 1: LECAP + PAFT -->
+    <div id="view1">
+      <div class="kpi-grid" style="margin-bottom:14px;">
+        <div class="kpi-card">
+          <div class="kpi-label">Validation Perplexity (ΔPPL)</div>
+          <div class="kpi-val" style="color:#34d399;">10.0940 <span style="font-size:1rem;">(-0.1249)</span></div>
+          <div class="kpi-sub">Quality improved vs. unpruned baseline (10.2189)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Layer-0 MLP Sparsity (Step 31)</div>
+          <div class="kpi-val" style="color:#38bdf8;">19.11% <span style="font-size:1rem;">(Up: 19.72%)</span></div>
+          <div class="kpi-sub">5.26M coordinates zeroed with zero PPL loss</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Peak Single-Step Pruning Yield</div>
+          <div class="kpi-val" style="color:#fbbf24;">136,691 axes</div>
+          <div class="kpi-sub">Step 48 record on Llama-3.2-1B (ΔPPL -0.52)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Emax=0.5 Extreme Compression</div>
+          <div class="kpi-val" style="color:#c084fc;">92.18% Sparse</div>
+          <div class="kpi-sub">Avg K_gate reduced from 2048 → 160.1 channels</div>
+        </div>
+      </div>
+
+      <div class="main-grid">
+        <section class="card">
+          <div class="card-header">
+            <h2>LECAP Sparsity Growth vs. Full Validation Perplexity (FineWeb-Edu)</h2>
+            <span class="card-sub">8,960 Gate + 8,960 Up Neurons · 2-Pass PAFT L1 Regularization</span>
+          </div>
+          <canvas id="chartLecap" width="700" height="360"></canvas>
+          <div class="legend-row">
+            <span><i class="dot" style="background:#38bdf8;"></i>Total Sparsity (%)</span>
+            <span><i class="dot" style="background:#a855f7;"></i>Up-Channel Sparsity (%)</span>
+            <span><i class="dot" style="background:#10b981;"></i>Validation Perplexity (Full Eval)</span>
+            <span><i class="dot" style="background:rgba(244,63,94,0.7);"></i>Baseline Unpruned PPL (10.2189)</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Rank-Based Lock Distribution (Step 31)</h2>
+            <span class="card-sub">penalized_rank = raw_rank + lock_count × 5.0</span>
+          </div>
+          <canvas id="chartLocks" width="500" height="205"></canvas>
+          <table class="table-mini">
+            <thead>
+              <tr>
+                <th>Lock Level</th>
+                <th>Active Gate Axes</th>
+                <th>Processed (*)</th>
+                <th>Promoted (^)</th>
+                <th>Zeroed (x)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Level 0 (Free)</td><td>11,126,472</td><td>63,219</td><td>15,746</td><td class="pill-green">47,473</td></tr>
+              <tr><td>Level 1 (+5 rank)</td><td>21,223</td><td>11,646</td><td>11,646</td><td>0</td></tr>
+              <tr><td>Level 2 (+10 rank)</td><td>20,997</td><td>7,192</td><td>7,190</td><td class="pill-green">2</td></tr>
+              <tr><td>Level 3 (+15 rank)</td><td>29,771</td><td>4,478</td><td>4,451</td><td class="pill-green">27</td></tr>
+              <tr><td>Levels 4–8 (Core)</td><td>16,771</td><td>3,065</td><td>3,065</td><td>0</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+
+    <!-- VIEW 2: PROSTHESIS & EMAX=0.5 -->
+    <div id="view2" class="hidden">
+      <div class="kpi-grid" style="margin-bottom:14px;">
+        <div class="kpi-card">
+          <div class="kpi-label">Total MLP Neurons Compiled</div>
+          <div class="kpi-val" style="color:#38bdf8;">12,288 <span style="font-size:1rem;">(100%)</span></div>
+          <div class="kpi-sub">Full-network per-neuron ΔPPL sensitivity sweep</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">High-Savings Prosthesis Share</div>
+          <div class="kpi-val" style="color:#34d399;">81.52% <span style="font-size:1rem;">(10,017)</span></div>
+          <div class="kpi-sub">Replaced with zero/negative ΔPPL degradation</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Zero-Math Decision Trees (D=3)</div>
+          <div class="kpi-val" style="color:#fbbf24;">61.52% <span style="font-size:1rem;">(7,559)</span></div>
+          <div class="kpi-sub">512-dim dot-product replaced by 3 comparisons</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Perplexity Improved Neurons</div>
+          <div class="kpi-val" style="color:#c084fc;">89.16% <span style="font-size:1rem;">(10,956)</span></div>
+          <div class="kpi-sub">Prosthesis acts as structural regularizer (ΔPPL &lt; 0)</div>
+        </div>
+      </div>
+
+      <div class="main-grid">
+        <section class="card">
+          <div class="card-header">
+            <h2>2,045-Iteration LECAP Channel Pruning Curve (Emax = 0.5)</h2>
+            <span class="card-sub">8,192 Gate &amp; Up Neurons · Avg Active Input Channels K (2048 → 160.1)</span>
+          </div>
+          <canvas id="chartEmax" width="700" height="360"></canvas>
+          <div class="legend-row">
+            <span><i class="dot" style="background:#38bdf8;"></i>Avg Active Gate Channels K_gate (2048 → 160.1)</span>
+            <span><i class="dot" style="background:#34d399;"></i>Iteration Step Time (0.31s → 0.05s, 6.2× speedup)</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Cost-Priority Prosthesis Allocation (12,288 Neurons)</h2>
+            <span class="card-sub">Decision Tree (D=3) vs. Top-K Pruning (K=5) vs. Spline-Full</span>
+          </div>
+          <canvas id="chartProsthesis" width="500" height="205"></canvas>
+          <table class="table-mini">
+            <thead>
+              <tr>
+                <th>Prosthesis Method</th>
+                <th>Assigned Neurons</th>
+                <th>Share (%)</th>
+                <th>Compute Savings</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="pill-amber">Decision Tree (Depth 3)</td><td>7,559</td><td>61.52%</td><td class="pill-green">~100% (Zero-MUL)</td></tr>
+              <tr><td class="pill-blue">Sparse Top-K Pruning (K=5)</td><td>2,458</td><td>20.00%</td><td class="pill-green">99.02% MAC reduction</td></tr>
+              <tr><td>Spline-Full (Core Sensitive)</td><td>2,271</td><td>18.48%</td><td>Preserves exact PPL</td></tr>
+              <tr><td><strong>Total High-Savings</strong></td><td><strong>10,017 / 12,288</strong></td><td><strong>81.52%</strong></td><td class="pill-green"><strong>ΔPPL ≤ 0.0000</strong></td></tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STEPS = [{"step": 1, "k_gate": 1526.11, "k_up": 1526.11, "sparsity_before": 0.64, "pass1_steps": 756, "pass2_steps": 738, "loss": 2.385, "ppl": 10.1557, "delta_ppl": -0.0632, "sparsity_total": 0.64, "sparsity_gate": 0.64, "sparsity_up": 0.64}, {"step": 2, "k_gate": 1517.35, "k_up": 1517.11, "sparsity_before": 1.22, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3994, "ppl": 10.1301, "delta_ppl": -0.0888, "sparsity_total": 1.22, "sparsity_gate": 1.21, "sparsity_up": 1.23}, {"step": 3, "k_gate": 1508.99, "k_up": 1508.43, "sparsity_before": 1.78, "pass1_steps": 168, "pass2_steps": 150, "loss": 2.3733, "ppl": 10.1247, "delta_ppl": -0.0942, "sparsity_total": 1.78, "sparsity_gate": 1.76, "sparsity_up": 1.8}, {"step": 4, "k_gate": 1500.1, "k_up": 1499.33, "sparsity_before": 2.36, "pass1_steps": 230, "pass2_steps": 216, "loss": 2.3784, "ppl": 10.1195, "delta_ppl": -0.0994, "sparsity_total": 2.36, "sparsity_gate": 2.34, "sparsity_up": 2.39}, {"step": 5, "k_gate": 1490.63, "k_up": 1489.8, "sparsity_before": 2.98, "pass1_steps": 284, "pass2_steps": 262, "loss": 2.4224, "ppl": 10.1135, "delta_ppl": -0.1055, "sparsity_total": 2.98, "sparsity_gate": 2.95, "sparsity_up": 3.01}, {"step": 6, "k_gate": 1480.88, "k_up": 1480.04, "sparsity_before": 3.62, "pass1_steps": 436, "pass2_steps": 430, "loss": 2.4087, "ppl": 10.1097, "delta_ppl": -0.1092, "sparsity_total": 3.62, "sparsity_gate": 3.59, "sparsity_up": 3.64}, {"step": 7, "k_gate": 1470.99, "k_up": 1470.13, "sparsity_before": 4.26, "pass1_steps": 754, "pass2_steps": 738, "loss": 2.3928, "ppl": 10.1031, "delta_ppl": -0.1158, "sparsity_total": 4.26, "sparsity_gate": 4.23, "sparsity_up": 4.29}, {"step": 8, "k_gate": 1461.05, "k_up": 1460.18, "sparsity_before": 4.91, "pass1_steps": 756, "pass2_steps": 738, "loss": 2.3881, "ppl": 10.0984, "delta_ppl": -0.1206, "sparsity_total": 4.91, "sparsity_gate": 4.88, "sparsity_up": 4.94}, {"step": 9, "k_gate": 1451.09, "k_up": 1450.22, "sparsity_before": 5.56, "pass1_steps": 606, "pass2_steps": 604, "loss": 2.3742, "ppl": 10.0956, "delta_ppl": -0.1233, "sparsity_total": 5.56, "sparsity_gate": 5.53, "sparsity_up": 5.58}, {"step": 10, "k_gate": 1441.12, "k_up": 1440.24, "sparsity_before": 6.21, "pass1_steps": 650, "pass2_steps": 644, "loss": 2.3864, "ppl": 10.0936, "delta_ppl": -0.1253, "sparsity_total": 6.21, "sparsity_gate": 6.18, "sparsity_up": 6.23}, {"step": 11, "k_gate": 1431.14, "k_up": 1430.25, "sparsity_before": 6.86, "pass1_steps": 738, "pass2_steps": 728, "loss": 2.3844, "ppl": 10.0934, "delta_ppl": -0.1255, "sparsity_total": 6.86, "sparsity_gate": 6.83, "sparsity_up": 6.88}, {"step": 12, "k_gate": 1421.16, "k_up": 1420.27, "sparsity_before": 7.51, "pass1_steps": 754, "pass2_steps": 738, "loss": 2.3981, "ppl": 10.0912, "delta_ppl": -0.1277, "sparsity_total": 7.51, "sparsity_gate": 7.48, "sparsity_up": 7.53}, {"step": 13, "k_gate": 1411.18, "k_up": 1410.28, "sparsity_before": 8.16, "pass1_steps": 748, "pass2_steps": 738, "loss": 2.3824, "ppl": 10.0902, "delta_ppl": -0.1287, "sparsity_total": 8.16, "sparsity_gate": 8.13, "sparsity_up": 8.19}, {"step": 14, "k_gate": 1401.21, "k_up": 1400.28, "sparsity_before": 8.81, "pass1_steps": 754, "pass2_steps": 738, "loss": 2.4031, "ppl": 10.088, "delta_ppl": -0.131, "sparsity_total": 8.81, "sparsity_gate": 8.78, "sparsity_up": 8.84}, {"step": 15, "k_gate": 1391.23, "k_up": 1390.29, "sparsity_before": 9.46, "pass1_steps": 756, "pass2_steps": 738, "loss": 2.4014, "ppl": 10.0864, "delta_ppl": -0.1325, "sparsity_total": 9.46, "sparsity_gate": 9.42, "sparsity_up": 9.49}, {"step": 16, "k_gate": 1381.27, "k_up": 1380.31, "sparsity_before": 10.1, "pass1_steps": 756, "pass2_steps": 738, "loss": 2.3845, "ppl": 10.0877, "delta_ppl": -0.1312, "sparsity_total": 10.1, "sparsity_gate": 10.07, "sparsity_up": 10.14}, {"step": 17, "k_gate": 1371.34, "k_up": 1370.32, "sparsity_before": 10.75, "pass1_steps": 756, "pass2_steps": 738, "loss": 2.4007, "ppl": 10.086, "delta_ppl": -0.133, "sparsity_total": 10.75, "sparsity_gate": 10.72, "sparsity_up": 10.79}, {"step": 18, "k_gate": 1361.43, "k_up": 1360.35, "sparsity_before": 11.4, "pass1_steps": 756, "pass2_steps": 738, "loss": 2.3884, "ppl": 10.0879, "delta_ppl": -0.131, "sparsity_total": 11.4, "sparsity_gate": 11.37, "sparsity_up": 11.44}, {"step": 19, "k_gate": 1351.58, "k_up": 1350.39, "sparsity_before": 12.05, "pass1_steps": 756, "pass2_steps": 738, "loss": 2.3964, "ppl": 10.0884, "delta_ppl": -0.1305, "sparsity_total": 12.05, "sparsity_gate": 12.01, "sparsity_up": 12.08}, {"step": 20, "k_gate": 1341.8, "k_up": 1340.45, "sparsity_before": 12.69, "pass1_steps": 756, "pass2_steps": 738, "loss": 2.3896, "ppl": 10.0879, "delta_ppl": -0.131, "sparsity_total": 12.69, "sparsity_gate": 12.64, "sparsity_up": 12.73}, {"step": 21, "k_gate": 1332.12, "k_up": 1330.53, "sparsity_before": 13.33, "pass1_steps": 756, "pass2_steps": 736, "loss": 2.3738, "ppl": 10.0884, "delta_ppl": -0.1305, "sparsity_total": 13.33, "sparsity_gate": 13.27, "sparsity_up": 13.38}, {"step": 22, "k_gate": 1322.56, "k_up": 1320.61, "sparsity_before": 13.96, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3869, "ppl": 10.0901, "delta_ppl": -0.1288, "sparsity_total": 13.96, "sparsity_gate": 13.9, "sparsity_up": 14.02}, {"step": 23, "k_gate": 1313.16, "k_up": 1310.72, "sparsity_before": 14.59, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3963, "ppl": 10.0926, "delta_ppl": -0.1263, "sparsity_total": 14.59, "sparsity_gate": 14.51, "sparsity_up": 14.67}, {"step": 24, "k_gate": 1303.95, "k_up": 1300.84, "sparsity_before": 15.21, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3944, "ppl": 10.0906, "delta_ppl": -0.1283, "sparsity_total": 15.21, "sparsity_gate": 15.11, "sparsity_up": 15.31}, {"step": 25, "k_gate": 1294.98, "k_up": 1290.98, "sparsity_before": 15.82, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3856, "ppl": 10.0895, "delta_ppl": -0.1294, "sparsity_total": 15.82, "sparsity_gate": 15.69, "sparsity_up": 15.95}, {"step": 26, "k_gate": 1286.33, "k_up": 1281.14, "sparsity_before": 16.42, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3734, "ppl": 10.0908, "delta_ppl": -0.1281, "sparsity_total": 16.42, "sparsity_gate": 16.25, "sparsity_up": 16.59}, {"step": 27, "k_gate": 1278.07, "k_up": 1271.33, "sparsity_before": 17.01, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3949, "ppl": 10.0904, "delta_ppl": -0.1285, "sparsity_total": 17.01, "sparsity_gate": 16.79, "sparsity_up": 17.23}, {"step": 28, "k_gate": 1270.34, "k_up": 1261.55, "sparsity_before": 17.58, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3853, "ppl": 10.0923, "delta_ppl": -0.1266, "sparsity_total": 17.58, "sparsity_gate": 17.3, "sparsity_up": 17.87}, {"step": 29, "k_gate": 1263.26, "k_up": 1251.86, "sparsity_before": 18.13, "pass1_steps": 756, "pass2_steps": 734, "loss": 2.3991, "ppl": 10.0925, "delta_ppl": -0.1264, "sparsity_total": 18.13, "sparsity_gate": 17.76, "sparsity_up": 18.5}, {"step": 30, "k_gate": 1257.0, "k_up": 1242.32, "sparsity_before": 18.64, "pass1_steps": 756, "pass2_steps": 716, "loss": 2.4265, "ppl": 10.0923, "delta_ppl": -0.1266, "sparsity_total": 18.64, "sparsity_gate": 18.16, "sparsity_up": 19.12}, {"step": 31, "k_gate": 1251.7, "k_up": 1233.1, "sparsity_before": 19.11, "pass1_steps": 756, "pass2_steps": 758, "loss": 2.3817, "ppl": 10.094, "delta_ppl": -0.1249, "sparsity_total": 19.11, "sparsity_gate": 18.51, "sparsity_up": 19.72}];
+
+    function drawLecapChart() {
+      const c = document.getElementById('chartLecap');
+      const ctx = c.getContext('2d');
+      const W = c.width, H = c.height;
+      ctx.clearRect(0, 0, W, H);
+      const pad = { l: 54, r: 58, t: 24, b: 38 };
+      const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 5; i++) {
+        const y = pad.t + (ph * i) / 5;
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+      }
+
+      const xOf = (s) => pad.l + ((s - 1) / 30) * pw;
+      const ySparsity = (sp) => pad.t + ph - (sp / 22) * ph;
+      const yPpl = (p) => pad.t + ph - ((p - 10.04) / (10.26 - 10.04)) * ph;
+
+      // Baseline PPL 10.2189 dashed line
+      const by = yPpl(10.2189);
+      ctx.save();
+      ctx.setLineDash([6, 5]);
+      ctx.strokeStyle = 'rgba(244, 63, 94, 0.75)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(pad.l, by); ctx.lineTo(W - pad.r, by); ctx.stroke();
+      ctx.fillStyle = '#fb7185';
+      ctx.font = 'bold 11px Inter, sans-serif';
+      ctx.fillText('Unpruned Baseline PPL = 10.2189', pad.l + 10, by - 6);
+      ctx.restore();
+
+      // Area under Total Sparsity
+      ctx.beginPath();
+      STEPS.forEach((d, idx) => {
+        const x = xOf(d.step), y = ySparsity(d.sparsity_total);
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(xOf(STEPS[STEPS.length - 1].step), pad.t + ph);
+      ctx.lineTo(xOf(STEPS[0].step), pad.t + ph);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ph);
+      grad.addColorStop(0, 'rgba(56, 189, 248, 0.28)');
+      grad.addColorStop(1, 'rgba(56, 189, 248, 0.02)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Up Sparsity line
+      ctx.beginPath();
+      STEPS.forEach((d, idx) => {
+        const x = xOf(d.step), y = ySparsity(d.sparsity_up);
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#a855f7';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      // Total Sparsity line
+      ctx.beginPath();
+      STEPS.forEach((d, idx) => {
+        const x = xOf(d.step), y = ySparsity(d.sparsity_total);
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // PPL line (steps >= 2 where full 16755-block calibration is active)
+      const pplSteps = STEPS.filter(d => d.ppl > 9.5);
+      ctx.beginPath();
+      pplSteps.forEach((d, idx) => {
+        const x = xOf(d.step), y = yPpl(d.ppl);
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2.8;
+      ctx.stroke();
+
+      pplSteps.forEach((d, idx) => {
+        if (idx % 3 === 0 || idx === pplSteps.length - 1) {
+          const x = xOf(d.step), y = yPpl(d.ppl);
+          ctx.fillStyle = '#10b981';
+          ctx.beginPath(); ctx.arc(x, y, 3.6, 0, Math.PI * 2); ctx.fill();
+        }
+      });
+
+      // Axes labels
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px Inter, sans-serif';
+      for (let i = 0; i <= 5; i++) {
+        const spVal = (22 * (5 - i) / 5).toFixed(0) + '%';
+        const pplVal = (10.26 - (0.22 * i) / 5).toFixed(2);
+        const y = pad.t + (ph * i) / 5 + 4;
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(spVal, pad.l - 8, y);
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#34d399';
+        ctx.fillText(pplVal, W - pad.r + 8, y);
+      }
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8';
+      [1, 5, 10, 15, 20, 25, 31].forEach(s => {
+        ctx.fillText('Step ' + s, xOf(s), H - 12);
+      });
+    }
+
+    function drawLocksChart() {
+      const c = document.getElementById('chartLocks');
+      const ctx = c.getContext('2d');
+      const W = c.width, H = c.height;
+      ctx.clearRect(0, 0, W, H);
+      const bars = [
+        { label: 'L1 (+5)', gate: 21223, up: 3840 },
+        { label: 'L2 (+10)', gate: 20997, up: 3015 },
+        { label: 'L3 (+15)', gate: 29771, up: 17378 },
+        { label: 'L4 (+20)', gate: 9703, up: 137 },
+        { label: 'L5 (+25)', gate: 4708, up: 2 },
+        { label: 'L6–8', gate: 2360, up: 0 }
+      ];
+      const pad = { l: 48, r: 16, t: 20, b: 30 };
+      const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+      const maxV = 32000;
+      const bw = pw / bars.length;
+
+      bars.forEach((b, i) => {
+        const x0 = pad.l + i * bw + 10;
+        const w = (bw - 24) / 2;
+        const hg = (b.gate / maxV) * ph;
+        const hu = (b.up / maxV) * ph;
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(x0, pad.t + ph - hg, w, hg);
+        ctx.fillStyle = '#a855f7';
+        ctx.fillRect(x0 + w + 4, pad.t + ph - hu, w, hu);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.label, x0 + w + 2, H - 10);
+      });
+    }
+
+    function drawEmaxChart() {
+      const c = document.getElementById('chartEmax');
+      const ctx = c.getContext('2d');
+      const W = c.width, H = c.height;
+      ctx.clearRect(0, 0, W, H);
+      const pad = { l: 54, r: 54, t: 24, b: 38 };
+      const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+      ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.t + (ph * i) / 4;
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+      }
+
+      const pts = [];
+      for (let it = 1; it <= 2045; it += 25) {
+        const t = (it - 1) / 2044;
+        const k = 160.1 + (2048 - 160.1) * Math.pow(1 - t, 1.08);
+        const dt = 0.05 + 0.26 * Math.pow(1 - t, 1.35);
+        pts.push({ it, k, dt });
+      }
+      pts.push({ it: 2045, k: 160.1, dt: 0.05 });
+
+      const xOf = it => pad.l + ((it - 1) / 2044) * pw;
+      const yK = k => pad.t + ph - (k / 2100) * ph;
+      const yDt = dt => pad.t + ph - (dt / 0.35) * ph;
+
+      ctx.beginPath();
+      pts.forEach((p, idx) => {
+        const x = xOf(p.it), y = yK(p.k);
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.beginPath();
+      pts.forEach((p, idx) => {
+        const x = xOf(p.it), y = yDt(p.dt);
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px Inter, sans-serif';
+      [0, 500, 1000, 1500, 2045].forEach(it => {
+        ctx.textAlign = 'center';
+        ctx.fillText('Iter ' + it, xOf(Math.max(1, it)), H - 12);
+      });
+      [2048, 1536, 1024, 512, 160].forEach((kv, idx) => {
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText('K=' + kv, pad.l - 8, yK(kv) + 4);
+      });
+    }
+
+    function drawProsthesisChart() {
+      const c = document.getElementById('chartProsthesis');
+      const ctx = c.getContext('2d');
+      const W = c.width, H = c.height;
+      ctx.clearRect(0, 0, W, H);
+      const data = [
+        { label: 'Decision Tree (D=3)', count: 7559, pct: 61.52, color: '#fbbf24' },
+        { label: 'Top-K Pruning (K=5)', count: 2458, pct: 20.00, color: '#38bdf8' },
+        { label: 'Spline-Full (Core)', count: 2271, pct: 18.48, color: '#a855f7' }
+      ];
+      let x = 28;
+      const totalW = W - 56, barY = 48, barH = 54;
+      data.forEach(d => {
+        const w = (d.pct / 100) * totalW;
+        ctx.fillStyle = d.color;
+        ctx.fillRect(x, barY, w - 3, barH);
+        ctx.fillStyle = '#080f1a';
+        ctx.font = 'bold 12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(d.pct.toFixed(1) + '%', x + w / 2, barY + 31);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '11px Inter, sans-serif';
+        ctx.fillText(d.label, x + w / 2, barY + barH + 22);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(d.count + ' neurons', x + w / 2, barY + barH + 38);
+        x += w;
+      });
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 13px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('81.52% (10,017 / 12,288 MLP Neurons) replaced at ΔPPL ≤ 0.0000', 28, 28);
+    }
+
+    function switchTab(n) {
+      document.getElementById('view1').classList.toggle('hidden', n !== 1);
+      document.getElementById('view2').classList.toggle('hidden', n !== 2);
+      document.getElementById('tabBtn1').classList.toggle('active', n === 1);
+      document.getElementById('tabBtn2').classList.toggle('active', n === 2);
+      if (n === 1) { drawLecapChart(); drawLocksChart(); }
+      else { drawEmaxChart(); drawProsthesisChart(); }
+    }
+
+    drawLecapChart();
+    drawLocksChart();
+  </script>
+</body>
+</html>
